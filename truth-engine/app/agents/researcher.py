@@ -20,6 +20,7 @@ from app.tools.tavily_search import search_multiple_queries
 genai.configure(api_key=GEMINI_API_KEY)
 
 MAX_RETRY_ROUNDS = 2  # Maximum self-reflection retry rounds
+RETRY_DELAY = 15  # seconds (free tier needs longer cooldowns)
 
 
 async def research_claims(claims: list[dict]) -> list[dict]:
@@ -64,26 +65,35 @@ async def research_claims(claims: list[dict]) -> list[dict]:
             queries = claim_queries_info.get("queries", [])
             all_evidence = search_multiple_queries(queries, max_results_per_query=3)
             
-            # Self-reflection retry loop
-            for retry_round in range(MAX_RETRY_ROUNDS):
-                reflection = await _reflect_on_evidence(claim_text, all_evidence)
-                
-                if reflection.get("sufficient", False):
-                    break
-                
-                # Get additional queries from reflection
-                additional_queries = reflection.get("additional_queries", [])
-                if additional_queries:
-                    new_evidence = search_multiple_queries(additional_queries, max_results_per_query=3)
-                    # Deduplicate
-                    existing_urls = {e.get("url") for e in all_evidence}
-                    for e in new_evidence:
-                        if e.get("url") not in existing_urls:
-                            all_evidence.append(e)
-                            existing_urls.add(e.get("url"))
-                    queries.extend(additional_queries)
-                else:
-                    break
+            # Smart self-reflection: only call Gemini if evidence is sparse
+            reflection = {"sufficient": True, "confidence": 0.5, "additional_queries": []}
+            
+            if len(all_evidence) >= 2:
+                # Enough evidence from initial search — skip expensive reflection call
+                reflection["confidence"] = min(0.7, 0.3 + len(all_evidence) * 0.1)
+                reflection["sufficient"] = True
+                logging.info(f"Claim {claim_id}: {len(all_evidence)} evidence items found, skipping reflection")
+            else:
+                # Sparse evidence — use self-reflection to generate better queries
+                for retry_round in range(MAX_RETRY_ROUNDS):
+                    reflection = await _reflect_on_evidence(claim_text, all_evidence)
+                    
+                    if reflection.get("sufficient", False):
+                        break
+                    
+                    # Get additional queries from reflection
+                    additional_queries = reflection.get("additional_queries", [])
+                    if additional_queries:
+                        new_evidence = search_multiple_queries(additional_queries, max_results_per_query=3)
+                        # Deduplicate
+                        existing_urls = {e.get("url") for e in all_evidence}
+                        for e in new_evidence:
+                            if e.get("url") not in existing_urls:
+                                all_evidence.append(e)
+                                existing_urls.add(e.get("url"))
+                        queries.extend(additional_queries)
+                    else:
+                        break
             
             research_results.append({
                 "claim_id": claim_id,
@@ -114,7 +124,7 @@ async def _generate_search_queries(claims: list[dict]) -> list[dict]:
     for attempt in range(3):
         try:
             if attempt > 0:
-                await asyncio.sleep(5 * attempt)
+                await asyncio.sleep(RETRY_DELAY * attempt)
                 logging.info(f"Researcher query gen retry {attempt}/3...")
             
             model = genai.GenerativeModel(
@@ -124,6 +134,7 @@ async def _generate_search_queries(claims: list[dict]) -> list[dict]:
                     temperature=0.3,
                     top_p=0.8,
                     max_output_tokens=4096,
+                    response_mime_type="application/json",
                 ),
             )
             
@@ -145,6 +156,9 @@ async def _generate_search_queries(claims: list[dict]) -> list[dict]:
             result = json.loads(response_text)
             return result.get("claim_queries", [])
         
+        except json.JSONDecodeError as e:
+            logging.warning(f"Researcher query gen JSON error (attempt {attempt + 1}/3): {e}")
+            continue
         except Exception as e:
             error_str = str(e).lower()
             if "429" in error_str or "quota" in error_str:
@@ -169,13 +183,14 @@ async def _reflect_on_evidence(claim_text: str, evidence: list[dict]) -> dict:
     for attempt in range(3):
         try:
             if attempt > 0:
-                await asyncio.sleep(5 * attempt)
+                await asyncio.sleep(RETRY_DELAY * attempt)
             
             model = genai.GenerativeModel(
                 model_name=GEMINI_MODEL,
                 generation_config=genai.GenerationConfig(
                     temperature=0.2,
                     max_output_tokens=1024,
+                    response_mime_type="application/json",
                 ),
             )
             
@@ -206,6 +221,9 @@ async def _reflect_on_evidence(claim_text: str, evidence: list[dict]) -> dict:
             
             return json.loads(response_text)
         
+        except json.JSONDecodeError as e:
+            logging.warning(f"Reflection JSON error (attempt {attempt + 1}/3): {e}")
+            continue
         except Exception as e:
             error_str = str(e).lower()
             if "429" in error_str or "quota" in error_str:

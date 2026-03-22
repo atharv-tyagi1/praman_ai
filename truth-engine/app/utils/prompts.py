@@ -4,41 +4,66 @@ Prompt templates for all agents in the truth-engine pipeline.
 
 # ─── Agent 1: Extractor ────────────────────────────────────────────────
 
-EXTRACTOR_SYSTEM_PROMPT = """You are a precise fact-checking claim extractor. Your job is to analyze input text and extract distinct, verifiable factual claims.
+EXTRACTOR_SYSTEM_PROMPT = """You are a precise fact-checking claim extractor. Your job is to analyze input text, resolve any ambiguous references, and extract distinct, verifiable factual claims.
 
-Instructions:
-1. Read the input text carefully.
-2. Identify 5–10 distinct factual claims that can be independently verified.
-3. Each claim should be a single, clear, self-contained statement.
-4. Focus on factual assertions (statistics, dates, events, attributions, scientific claims).
-5. Ignore opinions, subjective statements, and vague assertions.
-6. Categorize each claim (e.g., "statistics", "historical", "scientific", "political", "attribution", "current_events").
-7. Rate importance from 1–5 (5 = most critical to verify).
+## Instructions
 
-Think step-by-step before providing your output.
+### Step 1 — Context Resolution (CRITICAL)
+Before extracting any claims, perform coreference / pronoun resolution across the ENTIRE text:
+- Replace ALL pronouns (He, She, They, It, His, Her, Their, etc.) with the actual entity they refer to, based on surrounding context.
+- Replace vague references ("the company", "the country", "the leader") with the specific named entity.
+- Example: If the text says "Narendra Modi visited France. He signed a deal." → the claim must say "Narendra Modi signed a deal", NOT "He signed a deal."
+- Store the original unresolved sentence in the "original_text" field, and the fully resolved version in "claim_text".
 
-Respond with ONLY valid JSON in this exact format:
+### Step 2 — Claim Identification with Chain-of-Thought Reasoning
+For EACH potential claim, think step-by-step and explain in the "reasoning" field:
+1. What type of factual assertion is this? (statistic, date, event, attribution, scientific, etc.)
+2. WHY is this a verifiable claim? What specific evidence could confirm or refute it?
+3. Is it an opinion or subjective statement? If yes, SKIP it.
+4. Is it self-contained and independently checkable? If not, SKIP it.
+
+### Step 3 — Extract 5–10 Claims
+- Each claim must be a single, clear, self-contained factual statement with all pronouns resolved.
+- Focus on: statistics, dates, events, attributions, scientific claims, policy assertions.
+- Ignore: opinions, subjective statements, vague assertions, predictions.
+- Categorize each claim: "statistics", "historical", "scientific", "political", "attribution", "current_events", "economic", "legal".
+- Rate importance from 1–5 (5 = most critical to verify).
+
+## Output Format
+Respond with ONLY valid JSON strictly adhering to this format. 
+CRITICAL JSON RULES:
+1. Escape all internal double quotes with a backslash (\").
+2. No trailing commas in arrays or objects.
+3. Every key and string value must be enclosed in double quotes.
+
 {
   "claims": [
     {
       "id": 1,
-      "claim_text": "The exact factual claim as stated",
-      "category": "category_name",
-      "importance": 4,
-      "context": "Brief context about why this claim matters"
+      "original_text": "He won the election by a landslide.",
+      "claim_text": "Narendra Modi won the 2024 Indian general election by a landslide.",
+      "category": "political",
+      "importance": 5,
+      "context": "Claim about election outcome that can be checked against official results",
+      "reasoning": "This is a verifiable factual claim because: (1) It asserts a specific election outcome — winning 'by a landslide' — which can be checked against official Election Commission data. (2) The person and event are identifiable. (3) It is not an opinion — it states a measurable fact about victory margin."
     }
   ],
   "summary": "Brief summary of the text analyzed",
   "total_claims_found": 5
 }"""
 
-EXTRACTOR_USER_PROMPT = """Analyze the following text and extract all verifiable factual claims:
+EXTRACTOR_USER_PROMPT = """Analyze the following text and extract all verifiable factual claims.
+
+IMPORTANT RULES:
+1. First, resolve ALL pronouns and vague references to their actual named entities using context from the full text.
+2. For each claim, explain in the "reasoning" field WHY you consider it a verifiable factual claim.
+3. The "claim_text" must be fully self-contained — a reader should understand it WITHOUT reading the original article.
 
 ---
 {input_text}
 ---
 
-Extract 5–10 verifiable claims. Think step-by-step, then provide your JSON output."""
+Extract 5–10 verifiable claims. Think step-by-step, resolve all pronouns, then provide your JSON output."""
 
 
 # ─── Agent 2: Researcher ───────────────────────────────────────────────
@@ -106,6 +131,16 @@ Instructions:
 5. Write a clear, concise explanation citing specific sources.
 6. List all sources used with URLs.
 
+## CONFLICT LOGIC (CRITICAL)
+When evaluating evidence, pay special attention to SOURCE CONFLICTS:
+- If Source A SUPPORTS the claim but Source B CONTRADICTS it, you MUST assign "Partially True".
+- In the "conflict_note" field, explain EXACTLY which sources agree and which disagree, citing their URLs.
+- Example: "Reuters reports X, but AP News reports Y. The claim is partially true because..."
+- If ALL sources agree the claim is correct → "True".
+- If ALL sources agree the claim is wrong → "False".
+- If sources conflict or only partially support the claim → "Partially True" with conflict_note.
+- If no reliable sources can be found → "Unverifiable".
+
 Respond with ONLY valid JSON in this exact format:
 {
   "verdicts": [
@@ -115,6 +150,7 @@ Respond with ONLY valid JSON in this exact format:
       "verdict": "True|False|Partially True|Unverifiable",
       "confidence": 0.85,
       "explanation": "Detailed explanation with evidence analysis",
+      "conflict_note": "Only if sources disagree — explain which sources conflict and why",
       "sources": [
         {
           "title": "Source title",

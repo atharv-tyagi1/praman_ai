@@ -15,7 +15,7 @@ from app.utils.prompts import EXTRACTOR_SYSTEM_PROMPT, EXTRACTOR_USER_PROMPT
 genai.configure(api_key=GEMINI_API_KEY)
 
 MAX_RETRIES = 5
-RETRY_DELAY = 5  # seconds (free tier resets per-minute)
+RETRY_DELAY = 15  # seconds (free tier needs longer cooldowns)
 
 
 async def extract_claims(input_text: str) -> dict:
@@ -39,6 +39,7 @@ async def extract_claims(input_text: str) -> dict:
                     temperature=0.2,
                     top_p=0.8,
                     max_output_tokens=4096,
+                    response_mime_type="application/json",
                 ),
             )
             
@@ -71,17 +72,20 @@ async def extract_claims(input_text: str) -> dict:
             if "total_claims_found" not in result:
                 result["total_claims_found"] = len(result["claims"])
             
+            # Ensure new CoT and context-injection fields have defaults
+            for claim in result["claims"]:
+                if "reasoning" not in claim:
+                    claim["reasoning"] = "No reasoning provided."
+                if "original_text" not in claim:
+                    claim["original_text"] = claim.get("claim_text", "")
+            
             logging.info(f"Extractor found {len(result['claims'])} claims")
             return result
         
         except json.JSONDecodeError as e:
-            logging.error(f"Extractor JSON parse error: {e}")
-            return {
-                "claims": [],
-                "summary": "Failed to parse claims from AI response.",
-                "total_claims_found": 0,
-                "error": f"JSON parse error: {str(e)}"
-            }
+            logging.warning(f"Extractor JSON parse error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+            last_error = f"JSON parse error: {str(e)}"
+            continue  # Retry on malformed JSON
         except Exception as e:
             last_error = str(e)
             error_str = str(e).lower()

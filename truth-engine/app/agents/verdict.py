@@ -25,7 +25,7 @@ async def generate_verdicts(claims: list[dict], research_results: list[dict]) ->
     for attempt in range(3):
         try:
             if attempt > 0:
-                delay = 5 * attempt
+                delay = 15 * attempt
                 logging.info(f"Verdict retry {attempt}/3 after {delay}s delay...")
                 await asyncio.sleep(delay)
             
@@ -36,6 +36,7 @@ async def generate_verdicts(claims: list[dict], research_results: list[dict]) ->
                     temperature=0.1,
                     top_p=0.8,
                     max_output_tokens=8192,
+                    response_mime_type="application/json",
                 ),
             )
             
@@ -67,22 +68,18 @@ async def generate_verdicts(claims: list[dict], research_results: list[dict]) ->
             if "overall_assessment" not in result:
                 result["overall_assessment"] = _compute_overall_assessment(result["verdicts"])
             
+            # Ensure conflict_note defaults
+            for v in result["verdicts"]:
+                if "conflict_note" not in v:
+                    v["conflict_note"] = None
+            
             logging.info(f"Verdict produced {len(result['verdicts'])} verdicts")
             return result
         
         except json.JSONDecodeError as e:
-            logging.error(f"Verdict JSON parse error: {e}")
-            return {
-                "verdicts": [],
-                "overall_assessment": {
-                    "total_claims": len(claims),
-                    "true_count": 0, "false_count": 0,
-                    "partial_count": 0, "unverifiable_count": len(claims),
-                    "overall_credibility": 0.0,
-                    "summary": "Failed to parse verdict response."
-                },
-                "error": f"JSON parse error: {str(e)}"
-            }
+            logging.warning(f"Verdict JSON parse error (attempt {attempt + 1}/3): {e}")
+            last_error = f"JSON parse error: {str(e)}"
+            continue  # Retry on malformed JSON
         except Exception as e:
             last_error = str(e)
             error_str = str(e).lower()

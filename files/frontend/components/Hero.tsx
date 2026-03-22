@@ -10,7 +10,11 @@ const BADGES = [
   { icon: Globe, label: "50+ Sources" },
 ];
 
-export default function Hero() {
+interface HeroProps {
+  onVerify?: (query: string) => void;
+}
+
+export default function Hero({ onVerify }: HeroProps) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -34,8 +38,8 @@ export default function Hero() {
   }, [theme]);
 
   const handleVerify = () => {
-    if (query.trim()) {
-      alert(`Verifying: "${query.trim().slice(0, 80)}${query.length > 80 ? "..." : ""}"`);
+    if (query.trim() && onVerify) {
+      onVerify(query.trim());
     }
   };
 

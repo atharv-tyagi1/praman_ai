@@ -6,7 +6,7 @@ AI-based Fact-Check & Claim Verification System
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import verify, bonus
+from app.routers import verify, bonus, chat
 
 # ─── App Initialization ────────────────────────────────────────────────
 
@@ -39,6 +39,7 @@ app.add_middleware(
 
 app.include_router(verify.router, tags=["Verification"])
 app.include_router(bonus.router, tags=["Bonus Features"])
+app.include_router(chat.router, tags=["Chat"])
 
 # ─── Health Check ──────────────────────────────────────────────────────
 

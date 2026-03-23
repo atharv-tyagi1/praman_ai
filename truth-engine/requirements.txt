@@ -9,3 +9,5 @@ python-dotenv
 sse-starlette
 pydantic
 python-multipart
+PyPDF2
+python-docx

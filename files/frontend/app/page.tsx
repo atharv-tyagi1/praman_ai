@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Hero from "@/components/Hero";
+import Hero, { VerifyPayload } from "@/components/Hero";
 import About from "@/components/About";
 import Flow from "@/components/Flow";
 import Features from "@/components/Features";
@@ -9,21 +9,48 @@ import Powers from "@/components/Powers";
 import Footer from "@/components/Footer";
 import VerifyResults from "@/components/VerifyResults";
 
-export default function Home() {
-  const [verifyQuery, setVerifyQuery] = useState<string | null>(null);
+interface HistoryItem {
+  id: string;
+  label: string;
+  type: string;
+  timestamp: Date;
+}
 
-  if (verifyQuery) {
+export default function Home() {
+  const [verifyPayload, setVerifyPayload] = useState<VerifyPayload | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+
+  const handleVerify = (payload: VerifyPayload) => {
+    // Add to history
+    const newItem: HistoryItem = {
+      id: Date.now().toString(),
+      label: payload.query || payload.file?.name || "Uploaded file",
+      type: payload.type,
+      timestamp: new Date(),
+    };
+    setHistory((prev) => [newItem, ...prev]);
+    setVerifyPayload(payload);
+  };
+
+  const handleNewVerification = (payload: VerifyPayload) => {
+    // Save current report label to history (already there) and start new verification
+    handleVerify(payload);
+  };
+
+  if (verifyPayload) {
     return (
       <VerifyResults
-        query={verifyQuery}
-        onBack={() => setVerifyQuery(null)}
+        payload={verifyPayload}
+        onBack={() => setVerifyPayload(null)}
+        history={history}
+        onNewVerification={handleNewVerification}
       />
     );
   }
 
   return (
     <main className="bg-[#080C14] min-h-screen overflow-x-hidden">
-      <Hero onVerify={(q) => setVerifyQuery(q)} />
+      <Hero onVerify={handleVerify} />
       <About />
       <Flow />
       <Features />

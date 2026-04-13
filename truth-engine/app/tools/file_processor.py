@@ -12,10 +12,7 @@ import os
 import groq
 from typing import Optional
 
-from app.config import GROQ_API_KEY
-
-# Configure Groq client
-client = groq.Groq(api_key=GROQ_API_KEY)
+from app.config import groq_client
 
 
 async def extract_text_from_pdf(file_bytes: bytes) -> str:
@@ -63,7 +60,7 @@ async def extract_text_from_image(file_bytes: bytes, mime_type: str = "image/jpe
     try:
         b64_data = base64.b64encode(file_bytes).decode("utf-8")
         
-        completion = client.chat.completions.create(
+        completion = groq_client.chat.completions.create(
             model="llama-3.2-11b-vision-preview",
             messages=[
                 {
@@ -117,7 +114,7 @@ async def transcribe_audio(file_bytes: bytes, filename: str = "audio.mp3") -> st
         
         try:
             with open(tmp_path, "rb") as audio_file:
-                transcription = client.audio.transcriptions.create(
+                transcription = groq_client.audio.transcriptions.create(
                     model="whisper-large-v3",
                     file=audio_file,
                     response_format="text",

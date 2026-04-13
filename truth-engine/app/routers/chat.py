@@ -7,9 +7,8 @@ import groq
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.config import GROQ_API_KEY, GROQ_MODEL
+from app.config import GROQ_MODEL, groq_client
 
-client = groq.Groq(api_key=GROQ_API_KEY)
 router = APIRouter()
 
 
@@ -35,7 +34,7 @@ async def chat_with_report(request: ChatRequest):
         if request.report_context:
             system_msg += f"\n\n--- REPORT CONTEXT ---\n{request.report_context}\n--- END CONTEXT ---"
 
-        completion = client.chat.completions.create(
+        completion = groq_client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
                 {"role": "system", "content": system_msg},

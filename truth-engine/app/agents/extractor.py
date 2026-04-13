@@ -7,11 +7,8 @@ import json
 import asyncio
 import logging
 import groq
-from app.config import GROQ_API_KEY, GROQ_MODEL
+from app.config import GROQ_MODEL, groq_client
 from app.utils.prompts import EXTRACTOR_SYSTEM_PROMPT, EXTRACTOR_USER_PROMPT
-
-# Configure Groq
-client = groq.Groq(api_key=GROQ_API_KEY)
 
 MAX_RETRIES = 3
 RETRY_DELAY = 2  # seconds (used to be 15, lowered to improve frontend latency)
@@ -33,7 +30,7 @@ async def extract_claims(input_text: str) -> dict:
             
             prompt = EXTRACTOR_USER_PROMPT.format(input_text=input_text)
             
-            completion = client.chat.completions.create(
+            completion = groq_client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=[
                     {"role": "system", "content": EXTRACTOR_SYSTEM_PROMPT},

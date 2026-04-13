@@ -8,16 +8,13 @@ import json
 import asyncio
 import logging
 import groq
-from app.config import GROQ_API_KEY, GROQ_MODEL
+from app.config import GROQ_MODEL, groq_client
 from app.utils.prompts import (
     RESEARCHER_SYSTEM_PROMPT,
     RESEARCHER_USER_PROMPT,
     RESEARCHER_REFLECTION_PROMPT,
 )
 from app.tools.groq_search import search_multiple_queries
-
-# Configure Groq
-client = groq.Groq(api_key=GROQ_API_KEY)
 
 MAX_RETRY_ROUNDS = 2  # Maximum self-reflection retry rounds
 RETRY_DELAY = 2  # seconds (lowered to improve latency)
@@ -130,7 +127,7 @@ async def _generate_search_queries(claims: list[dict]) -> list[dict]:
             claims_json = json.dumps(claims, indent=2, default=str)
             prompt = RESEARCHER_USER_PROMPT.format(claims_json=claims_json)
             
-            completion = client.chat.completions.create(
+            completion = groq_client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=[
                     {"role": "system", "content": RESEARCHER_SYSTEM_PROMPT},
@@ -175,12 +172,13 @@ async def _reflect_on_evidence(claim_text: str, evidence: list[dict]) -> dict:
             if attempt > 0:
                 await asyncio.sleep(RETRY_DELAY * attempt)
             
+            evidence_summary = json.dumps(evidence, indent=2, default=str)
             prompt = RESEARCHER_REFLECTION_PROMPT.format(
                 claim_text=claim_text,
                 evidence_summary=evidence_summary,
             )
             
-            completion = client.chat.completions.create(
+            completion = groq_client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=[
                     {"role": "system", "content": "You are a reflection engine that outputs JSON objects."},

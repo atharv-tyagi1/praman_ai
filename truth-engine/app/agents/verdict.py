@@ -8,12 +8,8 @@ import json
 import asyncio
 import logging
 import groq
-from app.config import GROQ_API_KEY, GROQ_MODEL
+from app.config import GROQ_MODEL, groq_client
 from app.utils.prompts import VERDICT_SYSTEM_PROMPT, VERDICT_USER_PROMPT
-
-# Configure Groq
-client = groq.Groq(api_key=GROQ_API_KEY)
-
 
 async def generate_verdicts(claims: list[dict], research_results: list[dict]) -> dict:
     """
@@ -37,7 +33,7 @@ async def generate_verdicts(claims: list[dict], research_results: list[dict]) ->
                 evidence_json=evidence_json,
             )
             
-            completion = client.chat.completions.create(
+            completion = groq_client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=[
                     {"role": "system", "content": VERDICT_SYSTEM_PROMPT},

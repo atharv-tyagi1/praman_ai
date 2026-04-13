@@ -9,16 +9,13 @@ from fastapi import APIRouter, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
 
-from app.config import GROQ_API_KEY, GROQ_MODEL
+from app.config import GROQ_MODEL, groq_client
 from app.utils.prompts import (
     AI_DETECTION_SYSTEM_PROMPT,
     AI_DETECTION_USER_PROMPT,
     MEDIA_DETECTION_SYSTEM_PROMPT,
     MEDIA_DETECTION_USER_PROMPT,
 )
-
-# Configure Groq
-client = groq.Groq(api_key=GROQ_API_KEY)
 
 router = APIRouter()
 
@@ -42,7 +39,7 @@ async def detect_ai_text(request: AIDetectionRequest):
     try:
         prompt = AI_DETECTION_USER_PROMPT.format(input_text=request.text)
         
-        completion = client.chat.completions.create(
+        completion = groq_client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
                 {"role": "system", "content": AI_DETECTION_SYSTEM_PROMPT},
@@ -87,6 +84,7 @@ async def detect_media_manipulation(
     try:
         # Read the uploaded file
         contents = await file.read()
+        b64_data = base64.b64encode(contents).decode("utf-8")
         
         # Determine MIME type
         content_type = file.content_type or "image/jpeg"
@@ -106,7 +104,7 @@ async def detect_media_manipulation(
             }
         })
         
-        completion = client.chat.completions.create(
+        completion = groq_client.chat.completions.create(
             model="llama-3.2-11b-vision-preview",
             messages=[
                 {"role": "user", "content": content_items}

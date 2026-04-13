@@ -7,7 +7,7 @@ from typing import Any
 import json
 import logging
 import groq
-from app.config import GROQ_API_KEY, GROQ_MODEL
+from app.config import GROQ_MODEL, groq_client
 
 def search_groq(query: str, max_results: int = 5) -> list[dict[str, Any]]:
     """
@@ -21,7 +21,7 @@ def search_groq(query: str, max_results: int = 5) -> list[dict[str, Any]]:
         List of search result dicts with keys: title, url, content, score
     """
     try:
-        client = groq.Groq(api_key=GROQ_API_KEY)
+
         
         prompt = f"""
         You are a highly accurate fact-checking researcher. Given the following query, provide {max_results} highly relevant "search results" based on your internal knowledge. 
@@ -34,7 +34,7 @@ def search_groq(query: str, max_results: int = 5) -> list[dict[str, Any]]:
         Query: {query}
         """
         
-        response = client.chat.completions.create(
+        response = groq_client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
                 {"role": "system", "content": "You are a research assistant that only outputs valid JSON."},

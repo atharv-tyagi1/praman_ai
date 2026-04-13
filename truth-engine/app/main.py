@@ -68,6 +68,5 @@ async def detailed_health():
         "status": "active",
         "api_version": "1.0",
         "pipeline_ready": True,
-        "groq_configured": bool(GROQ_API_KEY and GROQ_API_KEY != "your_groq_api_key_here"),
-        "tavily_configured": False # Deprecated
+        "groq_configured": bool(GROQ_API_KEY and GROQ_API_KEY != "your_groq_api_key_here")
     }

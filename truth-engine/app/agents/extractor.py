@@ -14,13 +14,26 @@ MAX_RETRIES = 3
 RETRY_DELAY = 2  # seconds (used to be 15, lowered to improve frontend latency)
 
 
-async def extract_claims(input_text: str) -> dict:
+async def extract_claims(input_text: str, structured_content: dict | None = None) -> dict:
     """
     Extract verifiable factual claims from input text using Gemini.
     Includes retry logic for rate-limited (429) API responses.
     """
     last_error = None
     
+    # Format content for prompt
+    if structured_content:
+        # If we have structured content, format it explicitly
+        text_lines = []
+        if structured_content.get("text_content"):
+            text_lines.append(f"NATIVE TEXT CONTENT:\n{structured_content['text_content']}")
+        if structured_content.get("ocr_content"):
+            text_lines.append(f"OCR/VISION CONTENT:\n{structured_content['ocr_content']}")
+        
+        display_content = "\n\n".join(text_lines) if text_lines else input_text
+    else:
+        display_content = input_text
+
     for attempt in range(MAX_RETRIES):
         try:
             if attempt > 0:
@@ -28,7 +41,7 @@ async def extract_claims(input_text: str) -> dict:
                 logging.info(f"Extractor retry {attempt}/{MAX_RETRIES} after {delay}s delay...")
                 await asyncio.sleep(delay)
             
-            prompt = EXTRACTOR_USER_PROMPT.format(input_text=input_text)
+            prompt = EXTRACTOR_USER_PROMPT.format(input_text=display_content)
             
             completion = groq_client.chat.completions.create(
                 model=GROQ_MODEL,
@@ -37,7 +50,7 @@ async def extract_claims(input_text: str) -> dict:
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.2,
-                max_tokens=2048,
+                max_tokens=1000,
                 response_format={"type": "json_object"}
             )
             
@@ -61,6 +74,9 @@ async def extract_claims(input_text: str) -> dict:
                     claim["reasoning"] = "No reasoning provided."
                 if "original_text" not in claim:
                     claim["original_text"] = claim.get("claim_text", "")
+                if "source" not in claim:
+                    # Default: if OCR was present, it might be OCR, otherwise native_text
+                    claim["source"] = "ocr_vision" if structured_content and structured_content.get("ocr_content") else "native_text"
             
             logging.info(f"Extractor found {len(result['claims'])} claims")
             return result
@@ -74,8 +90,9 @@ async def extract_claims(input_text: str) -> dict:
             error_str = str(e).lower()
             
             # Retry on rate limit errors
-            if "429" in error_str or "quota" in error_str or "resource" in error_str:
-                logging.warning(f"Extractor rate limited (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+            if "429" in error_str or "quota" in error_str or "resource" in error_str or "rate_limit_exceeded" in error_str or "413" in error_str:
+                logging.warning(f"Extractor rate limited, waiting 20s (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+                await asyncio.sleep(20)
                 continue
             else:
                 logging.error(f"Extractor error (non-retryable): {e}")

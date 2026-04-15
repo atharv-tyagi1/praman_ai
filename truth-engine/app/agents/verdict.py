@@ -25,12 +25,26 @@ async def generate_verdicts(claims: list[dict], research_results: list[dict]) ->
                 logging.info(f"Verdict retry {attempt}/3 after {delay}s delay...")
                 await asyncio.sleep(delay)
             
-            claims_json = json.dumps(claims, indent=2, default=str)
-            evidence_json = json.dumps(research_results, indent=2, default=str)
+            # Strip down evidence to save token size
+            short_claims = [{"id": c.get("id"), "claim": c.get("claim_text")} for c in claims]
+            short_evidence = []
+            for r in research_results:
+                short_evidence.append({
+                    "claim_id": r.get("claim_id"),
+                    "evidence": r.get("evidence", [])
+                })
+
+            claims_json = json.dumps(short_claims, indent=1)
+            evidence_json = json.dumps(short_evidence, indent=1)
+
+            
+            from datetime import datetime
+            today_str = datetime.now().strftime("%Y-%m-%d")
             
             prompt = VERDICT_USER_PROMPT.format(
                 claims_json=claims_json,
                 evidence_json=evidence_json,
+                today=today_str,
             )
             
             completion = groq_client.chat.completions.create(
@@ -40,7 +54,7 @@ async def generate_verdicts(claims: list[dict], research_results: list[dict]) ->
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1,
-                max_tokens=3000,
+                max_tokens=1000,
                 response_format={"type": "json_object"}
             )
             
@@ -68,8 +82,9 @@ async def generate_verdicts(claims: list[dict], research_results: list[dict]) ->
         except Exception as e:
             last_error = str(e)
             error_str = str(e).lower()
-            if "429" in error_str or "quota" in error_str:
-                logging.warning(f"Verdict rate limited (attempt {attempt + 1}/3)")
+            if "429" in error_str or "quota" in error_str or "rate_limit_exceeded" in error_str or "413" in error_str:
+                logging.warning(f"Verdict rate limited, waiting 20s (attempt {attempt + 1}/3)")
+                await asyncio.sleep(20)
                 continue
             logging.error(f"Verdict error: {e}")
             return {

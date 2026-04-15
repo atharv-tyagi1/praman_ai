@@ -1,8 +1,6 @@
 fastapi
 uvicorn[standard]
 groq
-langgraph
-langchain-core
 beautifulsoup4
 httpx
 python-dotenv
@@ -11,3 +9,4 @@ pydantic
 python-multipart
 PyPDF2
 python-docx
+tavily-python

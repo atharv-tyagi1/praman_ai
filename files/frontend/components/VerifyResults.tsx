@@ -464,6 +464,33 @@ export default function VerifyResults({ payload, onBack, history, onNewVerificat
                     <span className="text-xs font-semibold" style={{ color: credibilityColor }}>{credibilityPercent}%</span>
                   </div>
                 </div>
+
+                {/* Report Downloads */}
+                {report.report_files && (
+                  <div className="flex items-center gap-3 mt-4 pt-4 border-t" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mr-2">Export:</p>
+                    <a
+                      href={`${API_URL}${report.report_files.pdf_url}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+                      style={{ background: "rgba(239,68,68,0.1)", color: "#F87171", border: "1px solid rgba(239,68,68,0.2)" }}
+                    >
+                      <FileText size={14} />
+                      Download PDF
+                    </a>
+                    <a
+                      href={`${API_URL}${report.report_files.ppt_url}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+                      style={{ background: "rgba(245,158,11,0.1)", color: "#FBBF24", border: "1px solid rgba(245,158,11,0.2)" }}
+                    >
+                      <BarChart3 size={14} />
+                      Download PPT
+                    </a>
+                  </div>
+                )}
               </motion.div>
 
               {/* KPI Cards */}
@@ -523,6 +550,11 @@ export default function VerifyResults({ payload, onBack, history, onNewVerificat
                               {v.verdict}
                             </span>
                             <span className="text-xs text-slate-500">{Math.round((v.confidence || 0) * 100)}% confidence</span>
+                            {v.source && (
+                              <span className="text-[10px] px-2 py-0.5 rounded bg-white/5 text-slate-400 border border-white/10 uppercase tracking-tighter">
+                                {v.source === "ocr_vision" ? "Image OCR" : "Native Text"}
+                              </span>
+                            )}
                           </div>
                         </div>
                         {isExpanded ? <ChevronUp size={18} className="text-slate-500 mt-1" /> : <ChevronDown size={18} className="text-slate-500 mt-1" />}

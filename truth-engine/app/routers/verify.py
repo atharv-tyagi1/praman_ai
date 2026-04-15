@@ -3,10 +3,11 @@ Verify router — POST /verify endpoint with SSE streaming.
 Also includes POST /verify-upload for file-based verification.
 """
 
+import os
 import uuid
 import asyncio
-from fastapi import APIRouter, Request, UploadFile, File, Form
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Request, UploadFile, File, Form, HTTPException
+from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 from typing import Optional
 
@@ -15,6 +16,25 @@ from app.tools.file_processor import process_uploaded_file
 
 
 router = APIRouter()
+REPORTS_DIR = "reports"
+
+
+@router.get("/download/pdf/{session_id}")
+async def download_pdf(session_id: str):
+    """Download the PDF report for a session."""
+    file_path = os.path.join(REPORTS_DIR, f"report_{session_id}.pdf")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="PDF report not found")
+    return FileResponse(file_path, filename=f"PramanAI_Report_{session_id}.pdf")
+
+
+@router.get("/download/ppt/{session_id}")
+async def download_ppt(session_id: str):
+    """Download the PPT report for a session."""
+    file_path = os.path.join(REPORTS_DIR, f"report_{session_id}.pptx")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="PPT report not found")
+    return FileResponse(file_path, filename=f"PramanAI_Report_{session_id}.pptx")
 
 
 class VerifyRequest(BaseModel):
@@ -134,6 +154,7 @@ async def verify_upload(
         run_pipeline(
             input_text=full_text,
             session_id=session_id,
+            structured_content=process_result.get("structured_content"),
         )
     )
     

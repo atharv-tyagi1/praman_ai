@@ -28,10 +28,19 @@ async def extract_text_from_pdf(file_bytes: bytes) -> str:
         
         full_text = "\n\n".join(text_parts)
         logging.info(f"PDF extraction: {len(reader.pages)} pages, {len(full_text)} chars")
-        return full_text
+        return {
+            "text_content": full_text,
+            "ocr_content": "",
+            "merged_content": full_text
+        }
     except Exception as e:
         logging.error(f"PDF extraction error: {e}")
-        return f"[Error extracting PDF text: {str(e)}]"
+        error_msg = f"[Error extracting PDF text: {str(e)}]"
+        return {
+            "text_content": error_msg,
+            "ocr_content": "",
+            "merged_content": error_msg
+        }
 
 
 async def extract_text_from_docx(file_bytes: bytes) -> str:
@@ -46,10 +55,19 @@ async def extract_text_from_docx(file_bytes: bytes) -> str:
         
         full_text = "\n\n".join(text_parts)
         logging.info(f"DOCX extraction: {len(doc.paragraphs)} paragraphs, {len(full_text)} chars")
-        return full_text
+        return {
+            "text_content": full_text,
+            "ocr_content": "",
+            "merged_content": full_text
+        }
     except Exception as e:
         logging.error(f"DOCX extraction error: {e}")
-        return f"[Error extracting DOCX text: {str(e)}]"
+        error_msg = f"[Error extracting DOCX text: {str(e)}]"
+        return {
+            "text_content": error_msg,
+            "ocr_content": "",
+            "merged_content": error_msg
+        }
 
 
 async def extract_text_from_image(file_bytes: bytes, mime_type: str = "image/jpeg") -> str:
@@ -61,7 +79,7 @@ async def extract_text_from_image(file_bytes: bytes, mime_type: str = "image/jpe
         b64_data = base64.b64encode(file_bytes).decode("utf-8")
         
         completion = groq_client.chat.completions.create(
-            model="llama-3.2-11b-vision-preview",
+            model="llama-3.2-90b-vision-preview",
             messages=[
                 {
                     "role": "user",
@@ -94,10 +112,19 @@ async def extract_text_from_image(file_bytes: bytes, mime_type: str = "image/jpe
         
         result = completion.choices[0].message.content.strip()
         logging.info(f"Image extraction: {len(result)} chars")
-        return result
+        return {
+            "text_content": "",
+            "ocr_content": result,
+            "merged_content": result
+        }
     except Exception as e:
         logging.error(f"Image extraction error: {e}")
-        return f"[Error extracting text from image: {str(e)}]"
+        error_msg = f"[Error extracting text from image: {str(e)}]"
+        return {
+            "text_content": "",
+            "ocr_content": error_msg,
+            "merged_content": error_msg
+        }
 
 
 async def transcribe_audio(file_bytes: bytes, filename: str = "audio.mp3") -> str:
@@ -122,12 +149,21 @@ async def transcribe_audio(file_bytes: bytes, filename: str = "audio.mp3") -> st
             
             result = str(transcription).strip()
             logging.info(f"Audio transcription: {len(result)} chars from {filename}")
-            return result
+            return {
+                "text_content": result,
+                "ocr_content": "",
+                "merged_content": result
+            }
         finally:
             os.unlink(tmp_path)
     except Exception as e:
         logging.error(f"Audio transcription error: {e}")
-        return f"[Error transcribing audio: {str(e)}]"
+        error_msg = f"[Error transcribing audio: {str(e)}]"
+        return {
+            "text_content": error_msg,
+            "ocr_content": "",
+            "merged_content": error_msg
+        }
 
 
 # File type → handler mapping
@@ -191,25 +227,31 @@ async def process_uploaded_file(
     }
     
     try:
+        content_struct = None
         if file_type == "document":
             if ext == ".pdf":
-                result["text"] = await extract_text_from_pdf(file_bytes)
+                content_struct = await extract_text_from_pdf(file_bytes)
             elif ext in (".docx", ".doc"):
-                result["text"] = await extract_text_from_docx(file_bytes)
+                content_struct = await extract_text_from_docx(file_bytes)
             elif ext == ".txt":
-                result["text"] = file_bytes.decode("utf-8", errors="replace")
+                text = file_bytes.decode("utf-8", errors="replace")
+                content_struct = {"text_content": text, "ocr_content": "", "merged_content": text}
             else:
                 result["error"] = f"Unsupported document format: {ext}"
         
         elif file_type == "image":
             mime = content_type or f"image/{ext.lstrip('.')}"
-            result["text"] = await extract_text_from_image(file_bytes, mime)
+            content_struct = await extract_text_from_image(file_bytes, mime)
         
         elif file_type == "audio":
-            result["text"] = await transcribe_audio(file_bytes, filename)
+            content_struct = await transcribe_audio(file_bytes, filename)
         
         else:
             result["error"] = f"Unsupported file type: {ext}"
+
+        if content_struct:
+            result["text"] = content_struct["merged_content"]
+            result["structured_content"] = content_struct
     
     except Exception as e:
         result["error"] = str(e)
